@@ -1,0 +1,1949 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Metabox Batch Pre-Render</title>
+
+    <style>
+      /* Critical Layout CSS - DO NOT REMOVE */
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background-color: #f9fafb;
+        font-size: 14px;
+        color: #1a1a1a;
+      }
+
+      .container {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        overflow: hidden;
+        background-color: white;
+      }
+
+      .left-panel,
+      .right-panel {
+        flex: 0 0 50%;
+      }
+
+      .left-panel {
+        height: 100%;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #1a1a2e;
+      }
+
+      .right-panel {
+        overflow: auto;
+        padding: 20px;
+        background: #fafbfc;
+        border-left: 1px solid #e1e4e8;
+      }
+
+      #embed3DSource {
+        width: 100%;
+        height: 100%;
+        background-color: #1a1a2e;
+        transition: width 0.3s ease, height 0.3s ease;
+      }
+
+      /* Viewport overlay for camera step */
+      .viewport-overlay {
+        position: absolute;
+        bottom: 16px;
+        left: 16px;
+        right: 16px;
+        background: rgba(0,0,0,0.75);
+        color: white;
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        text-align: center;
+        pointer-events: none;
+      }
+
+      /* Step navigation */
+      .steps {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 20px;
+        background: #f0f2f5;
+        border-radius: 10px;
+        padding: 4px;
+      }
+
+      .step-tab {
+        flex: 1;
+        padding: 8px 4px;
+        text-align: center;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        background: transparent;
+        color: #6b7280;
+        transition: all 0.15s ease;
+      }
+
+      .step-tab.active {
+        background: white;
+        color: #1a1a1a;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+
+      .step-tab.completed {
+        color: #059669;
+      }
+
+      .step-tab:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      /* Step content panels */
+      .step-content {
+        display: none;
+      }
+
+      .step-content.active {
+        display: block;
+      }
+
+      /* Form elements */
+      h2 {
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
+
+      .step-description {
+        color: #6b7280;
+        margin: 0 0 16px;
+        font-size: 13px;
+      }
+
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: #374151;
+        font-size: 13px;
+      }
+
+      input[type="text"],
+      input[type="number"],
+      select {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 14px;
+        background: white;
+        color: #1a1a1a;
+      }
+
+      input[type="text"]:focus,
+      input[type="number"]:focus,
+      select:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+      }
+
+      select {
+        appearance: none;
+        background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23666' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        background-size: 14px;
+        padding-right: 36px;
+      }
+
+      /* Buttons */
+      .btn {
+        padding: 8px 16px;
+        border: 1px solid #d1d5db;
+        background: white;
+        cursor: pointer;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        transition: all 0.15s ease;
+      }
+
+      .btn:hover {
+        background: #f9fafb;
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .btn-primary {
+        background: #1a1a1a;
+        color: white;
+        border-color: #1a1a1a;
+      }
+
+      .btn-primary:hover {
+        background: #333;
+      }
+
+      .btn-danger {
+        background: #dc2626;
+        color: white;
+        border-color: #dc2626;
+      }
+
+      .btn-danger:hover {
+        background: #b91c1c;
+      }
+
+      .btn-sm {
+        padding: 4px 10px;
+        font-size: 12px;
+      }
+
+      .btn-icon {
+        padding: 4px 8px;
+        font-size: 14px;
+        line-height: 1;
+        border: 1px solid #e5e7eb;
+        background: #f9fafb;
+      }
+
+      .btn-icon:hover {
+        background: #e5e7eb;
+      }
+
+      .btn-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      /* Input group */
+      .input-group {
+        margin-bottom: 16px;
+      }
+
+      .input-row {
+        display: flex;
+        gap: 8px;
+      }
+
+      .input-row input {
+        flex: 1;
+      }
+
+      /* Error / info messages */
+      .error-msg {
+        color: #dc2626;
+        font-size: 13px;
+        margin-top: 6px;
+      }
+
+      .info-msg {
+        color: #6b7280;
+        font-size: 13px;
+        margin-top: 6px;
+      }
+
+      .success-msg {
+        color: #059669;
+        font-size: 13px;
+        margin-top: 6px;
+      }
+
+      /* Section card */
+      .section {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+
+      .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+
+      .section-title {
+        font-weight: 600;
+        font-size: 14px;
+        color: #374151;
+      }
+
+      .section-actions {
+        display: flex;
+        gap: 4px;
+      }
+
+      /* Checkbox list for products/materials */
+      .check-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .check-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        transition: background 0.1s;
+      }
+
+      .check-item:hover {
+        background: #f3f4f6;
+      }
+
+      .check-item input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        accent-color: #1a1a1a;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+
+      .check-item label {
+        font-weight: 400;
+        margin: 0;
+        cursor: pointer;
+        flex: 1;
+        user-select: none;
+      }
+
+      .check-item .btn-icon {
+        opacity: 0;
+        transition: opacity 0.1s;
+      }
+
+      .check-item:hover .btn-icon {
+        opacity: 1;
+      }
+
+      /* Material slot sub-section */
+      .slot-section {
+        margin-top: 12px;
+        padding-left: 16px;
+        border-left: 2px solid #e5e7eb;
+      }
+
+      .slot-title {
+        font-weight: 600;
+        font-size: 13px;
+        color: #6b7280;
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      /* Stats bar */
+      .stats-bar {
+        background: #f0f2f5;
+        border-radius: 8px;
+        padding: 12px 16px;
+        display: flex;
+        gap: 24px;
+        font-size: 13px;
+        margin-top: 16px;
+      }
+
+      .stat {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .stat-label {
+        color: #6b7280;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+      }
+
+      .stat-value {
+        font-weight: 700;
+        font-size: 16px;
+        color: #1a1a1a;
+      }
+
+      /* Camera angle tag */
+      .camera-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        border-radius: 8px;
+        font-size: 13px;
+        color: #065f46;
+        margin-top: 8px;
+      }
+
+      .camera-tag .remove {
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        color: #6b7280;
+      }
+
+      .camera-tag .remove:hover {
+        color: #dc2626;
+      }
+
+      /* Render settings */
+      .preset-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+
+      .preset-btn {
+        padding: 8px 4px;
+        text-align: center;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 12px;
+        cursor: pointer;
+        background: white;
+        transition: all 0.15s;
+      }
+
+      .preset-btn:hover {
+        background: #f9fafb;
+      }
+
+      .preset-btn.active {
+        border-color: #1a1a1a;
+        background: #1a1a1a;
+        color: white;
+      }
+
+      .format-row {
+        display: flex;
+        gap: 6px;
+      }
+
+      /* Progress section */
+      .progress-section {
+        margin-top: 16px;
+      }
+
+      .progress-bar-container {
+        background: #e5e7eb;
+        border-radius: 99px;
+        height: 8px;
+        overflow: hidden;
+        margin-bottom: 8px;
+      }
+
+      .progress-bar-fill {
+        height: 100%;
+        background: #1a1a1a;
+        border-radius: 99px;
+        transition: width 0.3s ease;
+      }
+
+      .progress-info {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: #6b7280;
+      }
+
+      .progress-filename {
+        font-family: monospace;
+        font-size: 12px;
+        color: #6b7280;
+        margin-top: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Render log */
+      .render-log {
+        margin-top: 12px;
+        max-height: 150px;
+        overflow-y: auto;
+        font-size: 12px;
+        font-family: monospace;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 8px 12px;
+      }
+
+      .log-entry {
+        padding: 2px 0;
+        color: #6b7280;
+      }
+
+      .log-entry.error {
+        color: #dc2626;
+      }
+
+      .log-entry.success {
+        color: #059669;
+      }
+
+      /* Confirmation dialog */
+      .confirm-dialog {
+        background: #fffbeb;
+        border: 1px solid #fbbf24;
+        border-radius: 10px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+
+      .confirm-dialog h3 {
+        margin: 0 0 8px;
+        font-size: 15px;
+        color: #92400e;
+      }
+
+      .confirm-dialog p {
+        margin: 4px 0;
+        font-size: 13px;
+        color: #78350f;
+      }
+
+      /* Scrollbar styling */
+      .right-panel::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .right-panel::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      .right-panel::-webkit-scrollbar-thumb {
+        background: #d1d5db;
+        border-radius: 3px;
+      }
+
+      .right-panel::-webkit-scrollbar-thumb:hover {
+        background: #9ca3af;
+      }
+
+      /* Loading spinner */
+      .spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #e5e7eb;
+        border-top-color: #1a1a1a;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        vertical-align: middle;
+        margin-right: 6px;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+    </style>
+
+    <!-- Vue 3 import map -->
+    <script type="importmap">
+      {
+        "imports": {
+          "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js"
+        }
+      }
+    </script>
+
+    <!-- JSZip for ZIP generation -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"></script>
+
+    <script type="module">
+      import {
+        integrateMetabox,
+        SetProduct,
+        SetProductMaterial,
+        SetEnvironment,
+        SetEnvironmentMaterial,
+        GetScreenshot,
+        GetCamera,
+        SetCamera,
+        ShowEmbeddedMenu,
+        ShowOverlayInterface,
+      } from 'https://cdn.jsdelivr.net/npm/@3dsource/metabox-front-api@latest/+esm';
+      import { createApp, reactive, nextTick } from 'vue';
+
+      /**
+       * Extended Shim class with Promise-based async methods
+       * for batch rendering workflow
+       */
+      class Shim {
+        state = null;
+        product = null;
+        products = null;
+        environments = null;
+        productSlots = null;
+        environmentSlots = null;
+        productMaterialsIds = null;
+        api = {};
+
+        // Promise resolvers for async operations
+        _viewportReadyResolver = null;
+        _screenshotResolver = null;
+        _cameraResolver = null;
+
+        // All product data keyed by productId for batch selection
+        allProductSlots = {};
+
+        ready(api) {
+          this.api = api;
+          this.addApiEventListeners();
+          this.api.sendCommandToMetabox(new ShowEmbeddedMenu(false));
+          this.api.sendCommandToMetabox(new ShowOverlayInterface(false));
+        }
+
+        addApiEventListeners() {
+          this.api.addEventListener('configuratorDataUpdated', (data) =>
+            this.updateConfiguratorData(data),
+          );
+
+          this.api.addEventListener('viewportReady', (isReady) => {
+            if (isReady && this._viewportReadyResolver) {
+              this._viewportReadyResolver();
+              this._viewportReadyResolver = null;
+            }
+          });
+
+          this.api.addEventListener('screenshotReady', (data) => {
+            if (this._screenshotResolver) {
+              this._screenshotResolver(data);
+              this._screenshotResolver = null;
+            }
+          });
+
+          this.api.addEventListener('getCameraResult', (camera) => {
+            if (this._cameraResolver) {
+              this._cameraResolver(camera);
+              this._cameraResolver = null;
+            }
+          });
+        }
+
+        updateConfiguratorData(data) {
+          const {
+            productId,
+            configurator,
+            productMaterialsIds,
+            environmentId,
+          } = data;
+
+          this.productMaterialsIds = productMaterialsIds;
+
+          if (
+            !productId ||
+            !configurator ||
+            Object.keys(this.productMaterialsIds).length === 0
+          ) {
+            return;
+          }
+
+          this.state = data;
+          this.products =
+            configurator.products?.map((item) => item.product) || [];
+          this.environments =
+            configurator.environments?.map((item) => item.environment) || [];
+          this.product = this.products.find(
+            (product) => product.id === productId,
+          );
+
+          const environment = this.environments.find(
+            (env) => env.id === environmentId,
+          );
+
+          this.productSlots =
+            this.product?.slots.filter(
+              (slot) => slot.enabledMaterials.length > 0,
+            ) || [];
+          this.environmentSlots = environment?.slots?.filter(
+            (slot) => slot.enabledMaterials.length > 0,
+          ) || [];
+
+          // Cache slot data for all products for the batch selector
+          for (const prod of this.products) {
+            this.allProductSlots[prod.id] = prod.slots.filter(
+              (slot) => slot.enabledMaterials.length > 0,
+            );
+          }
+        }
+
+        sendProduct(productId) {
+          this.api.sendCommandToMetabox(new SetProduct(productId));
+        }
+
+        sendEnvironment(environmentId) {
+          this.api.sendCommandToMetabox(new SetEnvironment(environmentId));
+        }
+
+        sendProductMaterial(slotId, materialId) {
+          this.api.sendCommandToMetabox(
+            new SetProductMaterial(slotId, materialId),
+          );
+        }
+
+        sendEnvironmentMaterial(slotId, materialId) {
+          this.api.sendCommandToMetabox(
+            new SetEnvironmentMaterial(slotId, materialId),
+          );
+        }
+
+        setCamera(payload) {
+          // Deep-clone to strip Vue reactive Proxy — postMessage can't structured-clone Proxies
+          // NOTE: SetCamera has a known one-behind bug in the Metabox API.
+          // Once the API fix is released, this should work correctly as-is.
+          this.api.sendCommandToMetabox(new SetCamera(JSON.parse(JSON.stringify(payload))));
+        }
+
+        // Promise-based: wait for viewportReady true
+        waitForViewportReady(timeout = 15000) {
+          return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+              this._viewportReadyResolver = null;
+              reject(new Error('Viewport ready timeout'));
+            }, timeout);
+
+            this._viewportReadyResolver = () => {
+              clearTimeout(timer);
+              resolve();
+            };
+          });
+        }
+
+        // Promise-based: take screenshot and return base64 data
+        takeScreenshot(format, size, timeout = 30000) {
+          return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+              this._screenshotResolver = null;
+              reject(new Error('Screenshot timeout'));
+            }, timeout);
+
+            this._screenshotResolver = (data) => {
+              clearTimeout(timer);
+              resolve(data);
+            };
+
+            // Deep-clone size to strip Vue reactive Proxy
+            const plainSize = size ? JSON.parse(JSON.stringify(size)) : undefined;
+            this.api.sendCommandToMetabox(new GetScreenshot(format, plainSize));
+          });
+        }
+
+        // Promise-based: capture current camera state
+        captureCamera(timeout = 5000) {
+          return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+              this._cameraResolver = null;
+              reject(new Error('Camera capture timeout'));
+            }, timeout);
+
+            this._cameraResolver = (camera) => {
+              clearTimeout(timer);
+              resolve(camera);
+            };
+
+            this.api.sendCommandToMetabox(new GetCamera());
+          });
+        }
+
+        /**
+         * Wait for camera to stop moving after a SetCamera command.
+         * Polls GetCamera and compares consecutive results — when two
+         * reads match, the transition animation is complete.
+         *
+         * @param {number} initialDelay - ms to wait before first poll (let animation start)
+         * @param {number} pollInterval - ms between polls
+         * @param {number} maxWait - total ms before giving up
+         */
+        async waitForCameraStable(initialDelay = 1500, pollInterval = 500, maxWait = 8000) {
+          await sleep(initialDelay);
+
+          let prev = JSON.stringify(await this.captureCamera());
+          const deadline = Date.now() + maxWait;
+
+          while (Date.now() < deadline) {
+            await sleep(pollInterval);
+            const curr = JSON.stringify(await this.captureCamera());
+
+            if (curr === prev) {
+              // Two consecutive reads match — camera has stopped moving
+              return;
+            }
+            prev = curr;
+          }
+          // Timed out — proceed anyway with a final settle
+          await sleep(500);
+        }
+      }
+
+      // Helper: sleep for ms
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      // Helper: sanitize filename part
+      function sanitize(str) {
+        return str
+          .toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, '')
+          .replace(/\s+/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '');
+      }
+
+      // Helper: cartesian product of arrays
+      function cartesian(...arrays) {
+        return arrays.reduce(
+          (acc, arr) => acc.flatMap((x) => arr.map((y) => [...x, y])),
+          [[]],
+        );
+      }
+
+      // Helper: extract UUID from URL or raw UUID
+      function extractUUID(input) {
+        const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+        const match = input.match(uuidPattern);
+        return match ? match[0] : null;
+      }
+
+      // Format mime type to file extension
+      function mimeToExt(mime) {
+        const map = {
+          'image/png': 'png',
+          'image/jpeg': 'jpg',
+          'image/webp': 'webp',
+        };
+        return map[mime] || 'png';
+      }
+
+      // Format file size
+      function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+
+      createApp({
+        data() {
+          return {
+            shim: reactive(new Shim()),
+
+            // Step tracking
+            currentStep: 1,
+
+            // Step 1: Load
+            configuratorInput: '',
+            loadError: '',
+            isLoading: false,
+            isLoaded: false,
+
+            // Step 2: Select options
+            // Selected products: { [productId]: true/false }
+            selectedProducts: {},
+            // Selected materials: { [productId]: { [slotId]: { [materialId]: true/false } } }
+            selectedMaterials: {},
+            // Environment
+            selectedEnvironmentId: '',
+            selectedEnvMaterials: {},
+
+            // Viewport dimensions (tracked by ResizeObserver)
+            viewportWidth: 0,
+            viewportHeight: 0,
+
+            // Step 3: Camera angles (multi-angle)
+            angleName: 'front',
+            cameraAngles: [],  // [{ name: 'front', payload: {...} }, ...]
+            isCameraCapturing: false,
+
+            // Step 4: Render
+            resolutionPreset: '1024x1024',
+            customWidth: 1920,
+            customHeight: 1080,
+            format: 'image/png',
+            isEstimating: false,
+            estimatedFileSize: 0,
+
+            // Render state
+            showConfirmation: false,
+            isRendering: false,
+            cancelRequested: false,
+            renderProgress: { current: 0, total: 0, percent: 0, filename: '', startTime: 0 },
+            renderLog: [],
+            renderComplete: false,
+            completedCount: 0,
+            failedCount: 0,
+          };
+        },
+
+        computed: {
+          resolutionPresets() {
+            return [
+              { label: '1024 x 1024', value: '1024x1024' },
+              { label: '1920 x 1080', value: '1920x1080' },
+              { label: '2560 x 1440', value: '2560x1440' },
+              { label: '4096 x 4096', value: '4096x4096' },
+              { label: 'Custom', value: 'custom' },
+            ];
+          },
+
+          renderSize() {
+            if (this.resolutionPreset === 'custom') {
+              return { x: parseInt(this.customWidth) || 1024, y: parseInt(this.customHeight) || 1024 };
+            }
+            const [x, y] = this.resolutionPreset.split('x').map(Number);
+            return { x, y };
+          },
+
+          embedStyle() {
+            // On steps 1-2, fill the panel. On steps 3+, constrain to render aspect ratio.
+            if (this.currentStep < 3 || !this.viewportWidth || !this.viewportHeight) {
+              return { width: '100%', height: '100%' };
+            }
+
+            const vpW = this.viewportWidth;
+            const vpH = this.viewportHeight;
+            const targetAR = this.renderSize.x / this.renderSize.y;
+            const vpAR = vpW / vpH;
+
+            let w, h;
+            if (targetAR > vpAR) {
+              w = vpW;
+              h = vpW / targetAR;
+            } else {
+              h = vpH;
+              w = vpH * targetAR;
+            }
+
+            return {
+              width: Math.round(w) + 'px',
+              height: Math.round(h) + 'px',
+            };
+          },
+
+          // Build permutations from selections
+          permutations() {
+            const perms = [];
+
+            for (const product of (this.shim.products || [])) {
+              if (!this.selectedProducts[product.id]) continue;
+
+              const slots = this.shim.allProductSlots[product.id] || [];
+              const slotArrays = [];
+              const slotIds = [];
+
+              for (const slot of slots) {
+                const selectedMats = slot.enabledMaterials.filter(
+                  (m) => this.selectedMaterials[product.id]?.[slot.id]?.[m.id]
+                );
+                if (selectedMats.length === 0) continue;
+                slotArrays.push(selectedMats);
+                slotIds.push(slot.id);
+              }
+
+              if (slotArrays.length === 0) {
+                // Product selected but no materials selected — include once with defaults
+                perms.push({
+                  productId: product.id,
+                  productName: product.title,
+                  materials: [],
+                });
+                continue;
+              }
+
+              const combos = cartesian(...slotArrays);
+
+              for (const combo of combos) {
+                perms.push({
+                  productId: product.id,
+                  productName: product.title,
+                  materials: combo.map((mat, i) => ({
+                    slotId: slotIds[i],
+                    materialId: mat.id,
+                    materialName: mat.title,
+                  })),
+                });
+              }
+            }
+
+            // Sort by productId to minimize expensive product switches
+            perms.sort((a, b) => a.productId.localeCompare(b.productId));
+            return perms;
+          },
+
+          permutationCount() {
+            return this.permutations.length;
+          },
+
+          totalRenderCount() {
+            return this.permutationCount * Math.max(this.cameraAngles.length, 1);
+          },
+
+          estimatedTotalSize() {
+            if (!this.estimatedFileSize || !this.totalRenderCount) return '';
+            return formatSize(this.estimatedFileSize * this.totalRenderCount);
+          },
+
+          elapsedTime() {
+            if (!this.renderProgress.startTime || this.renderProgress.current === 0) return '';
+            const elapsed = Date.now() - this.renderProgress.startTime;
+            const perRender = elapsed / this.renderProgress.current;
+            const remaining = perRender * (this.renderProgress.total - this.renderProgress.current);
+            const secs = Math.ceil(remaining / 1000);
+            if (secs < 60) return `~${secs}s remaining`;
+            return `~${Math.ceil(secs / 60)}m remaining`;
+          },
+
+          canProceedToStep2() {
+            return this.isLoaded && this.shim.state;
+          },
+
+          canProceedToStep3() {
+            return this.permutationCount > 0;
+          },
+
+          canProceedToStep4() {
+            return this.cameraAngles.length > 0;
+          },
+        },
+
+        mounted() {
+          // Track viewport dimensions for aspect ratio guide
+          const viewport = this.$refs.viewport;
+          if (viewport) {
+            this._resizeObserver = new ResizeObserver((entries) => {
+              const entry = entries[0];
+              if (entry) {
+                this.viewportWidth = entry.contentRect.width;
+                this.viewportHeight = entry.contentRect.height;
+              }
+            });
+            this._resizeObserver.observe(viewport);
+          }
+        },
+
+        beforeUnmount() {
+          if (this._resizeObserver) {
+            this._resizeObserver.disconnect();
+          }
+        },
+
+        watch: {
+          'shim.state'(newVal) {
+            if (newVal && this.isLoading) {
+              this.isLoading = false;
+              this.isLoaded = true;
+              this.initSelections();
+              this.currentStep = 2;
+            }
+          },
+        },
+
+        methods: {
+          // Step 1: Load configurator
+          loadConfigurator() {
+            const uuid = extractUUID(this.configuratorInput.trim());
+            if (!uuid) {
+              this.loadError = 'Invalid input. Enter a Metabox URL or configurator UUID.';
+              return;
+            }
+
+            this.loadError = '';
+            this.isLoading = true;
+            this.isLoaded = false;
+
+            // Clear any previous iframe
+            const container = document.getElementById('embed3DSource');
+            const existingIframe = container.querySelector('iframe');
+            if (existingIframe) {
+              existingIframe.remove();
+            }
+
+            // Reset shim
+            this.shim.state = null;
+            this.shim.products = null;
+
+            try {
+              integrateMetabox(
+                uuid,
+                'embed3DSource',
+                (api) => {
+                  this.shim.ready(api);
+                },
+                { standalone: true },
+              );
+            } catch (err) {
+              this.loadError = err.message || 'Failed to load configurator.';
+              this.isLoading = false;
+              return;
+            }
+
+            // Timeout after 30s
+            setTimeout(() => {
+              if (this.isLoading) {
+                this.isLoading = false;
+                this.loadError = 'Configurator load timed out (30s). Check the ID and try again.';
+              }
+            }, 30000);
+          },
+
+          // Initialize selections when configurator data first arrives
+          initSelections() {
+            const products = this.shim.products || [];
+            const newSelectedProducts = {};
+            const newSelectedMaterials = {};
+
+            for (const product of products) {
+              newSelectedProducts[product.id] = true;
+              newSelectedMaterials[product.id] = {};
+
+              const slots = this.shim.allProductSlots[product.id] || [];
+              for (const slot of slots) {
+                newSelectedMaterials[product.id][slot.id] = {};
+                for (const mat of slot.enabledMaterials) {
+                  newSelectedMaterials[product.id][slot.id][mat.id] = true;
+                }
+              }
+            }
+
+            this.selectedProducts = newSelectedProducts;
+            this.selectedMaterials = newSelectedMaterials;
+
+            if (this.shim.state) {
+              this.selectedEnvironmentId = this.shim.state.environmentId;
+            }
+          },
+
+          // Step 2: Toggle helpers
+          toggleAllMaterials(productId, slotId, value) {
+            const slots = this.shim.allProductSlots[productId] || [];
+            const slot = slots.find((s) => s.id === slotId);
+            if (!slot) return;
+
+            if (!this.selectedMaterials[productId]) {
+              this.selectedMaterials[productId] = {};
+            }
+            if (!this.selectedMaterials[productId][slotId]) {
+              this.selectedMaterials[productId][slotId] = {};
+            }
+
+            for (const mat of slot.enabledMaterials) {
+              this.selectedMaterials[productId][slotId][mat.id] = value;
+            }
+          },
+
+          selectedMaterialCount(productId, slotId) {
+            const slotMats = this.selectedMaterials[productId]?.[slotId];
+            if (!slotMats) return 0;
+            return Object.values(slotMats).filter(Boolean).length;
+          },
+
+          totalMaterialCount(productId, slotId) {
+            const slots = this.shim.allProductSlots[productId] || [];
+            const slot = slots.find((s) => s.id === slotId);
+            return slot ? slot.enabledMaterials.length : 0;
+          },
+
+          // Preview a product/material in the viewport without changing selections
+          previewProduct(productId) {
+            this.shim.sendProduct(productId);
+          },
+
+          previewMaterial(slotId, materialId) {
+            this.shim.sendProductMaterial(slotId, materialId);
+          },
+
+          previewEnvironment() {
+            if (this.selectedEnvironmentId) {
+              this.shim.sendEnvironment(this.selectedEnvironmentId);
+            }
+          },
+
+          previewEnvMaterial(slotId, materialId) {
+            this.shim.sendEnvironmentMaterial(slotId, materialId);
+          },
+
+          // Get product permutation count for display
+          getProductPermCount(productId) {
+            const slots = this.shim.allProductSlots[productId] || [];
+            let count = 1;
+            let hasAny = false;
+
+            for (const slot of slots) {
+              const selCount = this.selectedMaterialCount(productId, slot.id);
+              if (selCount > 0) {
+                count *= selCount;
+                hasAny = true;
+              }
+            }
+
+            return hasAny ? count : (this.selectedProducts[productId] ? 1 : 0);
+          },
+
+          // Step 3: Camera (multi-angle)
+          async addAngle() {
+            if (!this.angleName.trim()) return;
+
+            // Check for duplicate name
+            const name = this.angleName.trim();
+            if (this.cameraAngles.some((a) => a.name.toLowerCase() === name.toLowerCase())) {
+              alert(`An angle named "${name}" already exists. Use a different name or recapture the existing one.`);
+              return;
+            }
+
+            this.isCameraCapturing = true;
+            try {
+              const payload = await this.shim.captureCamera();
+              this.cameraAngles.push({ name, payload: JSON.parse(JSON.stringify(payload)) });
+              this.angleName = '';
+            } catch (err) {
+              alert('Failed to capture camera angle: ' + err.message);
+            }
+            this.isCameraCapturing = false;
+          },
+
+          async recaptureAngle(index) {
+            this.isCameraCapturing = true;
+            try {
+              const payload = await this.shim.captureCamera();
+              this.cameraAngles[index].payload = JSON.parse(JSON.stringify(payload));
+            } catch (err) {
+              alert('Failed to recapture camera angle: ' + err.message);
+            }
+            this.isCameraCapturing = false;
+          },
+
+          previewAngle(index) {
+            const angle = this.cameraAngles[index];
+            if (angle?.payload) {
+              this.shim.setCamera(angle.payload);
+            }
+          },
+
+          removeAngle(index) {
+            this.cameraAngles.splice(index, 1);
+          },
+
+          // Step 4: Estimate size
+          async estimateSize() {
+            this.isEstimating = true;
+            try {
+              const data = await this.shim.takeScreenshot(this.format, this.renderSize, 30000);
+              if (data) {
+                // Base64 data URL: strip prefix, measure raw base64
+                const base64Part = data.split(',')[1] || data;
+                // Base64 encodes 3 bytes in 4 chars, so decoded size ≈ base64.length * 3/4
+                this.estimatedFileSize = Math.ceil(base64Part.length * 3 / 4);
+              }
+            } catch {
+              this.estimatedFileSize = 0;
+            }
+            this.isEstimating = false;
+          },
+
+          // Step 4: Start render
+          startRender() {
+            this.showConfirmation = true;
+          },
+
+          async confirmRender() {
+            this.showConfirmation = false;
+            this.isRendering = true;
+            this.cancelRequested = false;
+            this.renderComplete = false;
+            this.completedCount = 0;
+            this.failedCount = 0;
+            this.renderLog = [];
+
+            const perms = this.permutations;
+            const angles = this.cameraAngles;
+            const total = perms.length * angles.length;
+            this.renderProgress = {
+              current: 0,
+              total,
+              percent: 0,
+              filename: '',
+              startTime: Date.now(),
+            };
+
+            const zip = new JSZip();
+            const usedNames = new Set();
+            let renderIndex = 0;
+            const ext = mimeToExt(this.format);
+
+            // Set environment once (fixed for the entire batch)
+            if (this.selectedEnvironmentId) {
+              this.shim.sendEnvironment(this.selectedEnvironmentId);
+            }
+            for (const [slotId, materialId] of Object.entries(this.selectedEnvMaterials)) {
+              if (materialId) {
+                this.shim.sendEnvironmentMaterial(slotId, materialId);
+              }
+            }
+
+            // Outer loop: camera angles
+            // Inner loop: permutations (product + material combos)
+            //
+            // This order is critical: SetCamera alone does NOT force the
+            // 3D engine to re-render the frame buffer. But product/material
+            // changes DO trigger a full re-render — which naturally picks up
+            // the current camera position. By setting the camera once per
+            // angle and then cycling materials, every screenshot is preceded
+            // by a material change that forces a fresh render.
+            for (let a = 0; a < angles.length; a++) {
+              if (this.cancelRequested) {
+                this.addLog('Cancelled by user.', 'error');
+                break;
+              }
+
+              const angle = angles[a];
+              this.addLog(`Setting camera angle: ${angle.name}`);
+
+              // Set camera once for this angle
+              this.shim.setCamera(angle.payload);
+              await this.shim.waitForCameraStable();
+
+              let lastProductId = null;
+
+              // Cycle through all permutations at this angle
+              for (let i = 0; i < perms.length; i++) {
+                if (this.cancelRequested) {
+                  this.addLog('Cancelled by user.', 'error');
+                  break;
+                }
+
+                const perm = perms[i];
+
+                // Switch product if needed
+                const productChanged = perm.productId !== lastProductId;
+                if (productChanged) {
+                  this.shim.sendProduct(perm.productId);
+                  this.addLog(`Switching to product: ${perm.productName}`);
+                }
+
+                // Set materials — triggers re-render with current camera
+                for (const mat of perm.materials) {
+                  this.shim.sendProductMaterial(mat.slotId, mat.materialId);
+                }
+
+                // If no materials AND no product change, re-send product
+                // to force the engine to re-render with the current camera
+                if (perm.materials.length === 0 && !productChanged) {
+                  this.shim.sendProduct(perm.productId);
+                }
+
+                // Wait for the engine to finish rendering
+                try {
+                  await this.shim.waitForViewportReady(15000);
+                } catch {
+                  await sleep(3000);
+                }
+                await sleep(500);
+
+                lastProductId = perm.productId;
+
+                // Build filename
+                const parts = [sanitize(perm.productName)];
+                for (const mat of perm.materials) {
+                  parts.push(sanitize(mat.materialName));
+                }
+                parts.push(sanitize(angle.name));
+                let baseName = parts.join('_');
+                let filename = `${baseName}.${ext}`;
+
+                // Dedup
+                if (usedNames.has(filename)) {
+                  let suffix = 2;
+                  while (usedNames.has(`${baseName}_${suffix}.${ext}`)) suffix++;
+                  filename = `${baseName}_${suffix}.${ext}`;
+                }
+                usedNames.add(filename);
+
+                this.renderProgress.current = renderIndex;
+                this.renderProgress.percent = Math.round((renderIndex / total) * 100);
+                this.renderProgress.filename = filename;
+
+                try {
+                  const imageData = await this.shim.takeScreenshot(this.format, this.renderSize, 30000);
+
+                  if (imageData) {
+                    const base64 = imageData.split(',')[1] || imageData;
+                    zip.file(filename, base64, { base64: true });
+                    this.completedCount++;
+                    this.addLog(`Rendered: ${filename}`, 'success');
+                  } else {
+                    this.failedCount++;
+                    this.addLog(`No image data: ${filename}`, 'error');
+                  }
+                } catch (err) {
+                  this.failedCount++;
+                  this.addLog(`Failed: ${filename} — ${err.message}`, 'error');
+                }
+
+                renderIndex++;
+              }
+
+              if (this.cancelRequested) break;
+            }
+
+            // Finalize
+            this.renderProgress.current = total;
+            this.renderProgress.percent = 100;
+
+            if (this.completedCount > 0) {
+              this.addLog('Generating ZIP...');
+              try {
+                const blob = await zip.generateAsync({ type: 'blob' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const angleNames = this.cameraAngles.map((a) => sanitize(a.name)).join('-');
+                a.download = `batch-render_${angleNames}_${Date.now()}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                this.addLog(`ZIP downloaded: ${this.completedCount} renders (${formatSize(blob.size)})`, 'success');
+              } catch (err) {
+                this.addLog(`ZIP generation failed: ${err.message}`, 'error');
+              }
+            } else {
+              this.addLog('No renders completed — nothing to download.', 'error');
+            }
+
+            this.isRendering = false;
+            this.renderComplete = true;
+          },
+
+          cancelRender() {
+            this.cancelRequested = true;
+          },
+
+          addLog(msg, type = '') {
+            this.renderLog.push({ msg, type, time: new Date().toLocaleTimeString() });
+            // Auto-scroll log
+            nextTick(() => {
+              const el = this.$refs.logContainer;
+              if (el) el.scrollTop = el.scrollHeight;
+            });
+          },
+
+          goToStep(step) {
+            if (step === 1) {
+              this.currentStep = 1;
+            } else if (step === 2 && this.canProceedToStep2) {
+              this.currentStep = 2;
+            } else if (step === 3 && this.canProceedToStep3) {
+              this.currentStep = 3;
+            } else if (step === 4 && this.canProceedToStep4) {
+              this.currentStep = 4;
+            }
+          },
+
+          nextStep() {
+            if (this.currentStep < 4) {
+              this.goToStep(this.currentStep + 1);
+            }
+          },
+
+          resetRender() {
+            this.renderComplete = false;
+            this.renderLog = [];
+            this.completedCount = 0;
+            this.failedCount = 0;
+            this.renderProgress = { current: 0, total: 0, percent: 0, filename: '', startTime: 0 };
+          },
+
+          // Template helpers
+          formatSizeDisplay(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+          },
+
+          mimeToExtDisplay(mime) {
+            const map = { 'image/png': 'PNG', 'image/jpeg': 'JPEG', 'image/webp': 'WebP' };
+            return map[mime] || 'PNG';
+          },
+        },
+      }).mount('#app');
+    </script>
+  </head>
+  <body>
+    <noscript>
+      <strong>This app requires JavaScript. Please enable JavaScript in your browser.</strong>
+    </noscript>
+
+    <div class="container" id="app">
+      <!-- Left Panel: 3D Viewport -->
+      <div class="left-panel" ref="viewport">
+        <div id="embed3DSource" :style="embedStyle"></div>
+
+        <!-- Camera step overlay hint -->
+        <div class="viewport-overlay" v-if="currentStep === 3">
+          Position the camera, name it, and click "Add Angle"
+        </div>
+        <div class="viewport-overlay" v-if="isRendering">
+          <span class="spinner"></span>
+          Rendering {{ renderProgress.current + 1 }} / {{ renderProgress.total }}
+        </div>
+      </div>
+
+      <!-- Right Panel: Workflow Steps -->
+      <div class="right-panel">
+        <!-- Step Tabs -->
+        <div class="steps">
+          <button class="step-tab"
+            :class="{ active: currentStep === 1, completed: isLoaded }"
+            @click="goToStep(1)">
+            1. Load
+          </button>
+          <button class="step-tab"
+            :class="{ active: currentStep === 2, completed: canProceedToStep3 }"
+            :disabled="!canProceedToStep2"
+            @click="goToStep(2)">
+            2. Select
+          </button>
+          <button class="step-tab"
+            :class="{ active: currentStep === 3, completed: canProceedToStep4 }"
+            :disabled="!canProceedToStep3"
+            @click="goToStep(3)">
+            3. Camera
+          </button>
+          <button class="step-tab"
+            :class="{ active: currentStep === 4 }"
+            :disabled="!canProceedToStep4"
+            @click="goToStep(4)">
+            4. Render
+          </button>
+        </div>
+
+        <!-- Step 1: Load Configurator -->
+        <div class="step-content" :class="{ active: currentStep === 1 }">
+          <h2>Load Configurator</h2>
+          <p class="step-description">Paste a Metabox URL or configurator UUID to load the 3D viewport.</p>
+
+          <div class="input-group">
+            <label for="config-input">Configurator URL or UUID</label>
+            <div class="input-row">
+              <input
+                type="text"
+                id="config-input"
+                v-model="configuratorInput"
+                placeholder="https://metabox.3dsource.com/.../54c0a58e-... or UUID"
+                @keyup.enter="loadConfigurator"
+                :disabled="isLoading"
+              />
+              <button class="btn btn-primary" @click="loadConfigurator" :disabled="isLoading || !configuratorInput.trim()">
+                <span v-if="isLoading"><span class="spinner"></span>Loading</span>
+                <span v-else>Load</span>
+              </button>
+            </div>
+            <p class="error-msg" v-if="loadError">{{ loadError }}</p>
+            <p class="success-msg" v-if="isLoaded">
+              Loaded — {{ shim.products?.length || 0 }} product(s), {{ shim.environments?.length || 0 }} environment(s)
+            </p>
+          </div>
+
+          <div class="btn-row" v-if="isLoaded">
+            <button class="btn btn-primary" @click="nextStep">Next: Select Options</button>
+          </div>
+        </div>
+
+        <!-- Step 2: Select Options -->
+        <div class="step-content" :class="{ active: currentStep === 2 }">
+          <h2>Select Options</h2>
+          <p class="step-description">Choose which products, materials, and environment to include in the batch.</p>
+
+          <!-- Products & Materials -->
+          <div v-for="product in (shim.products || [])" :key="product.id" class="section">
+            <div class="section-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input
+                  type="checkbox"
+                  :id="'prod-' + product.id"
+                  v-model="selectedProducts[product.id]"
+                  style="width: 16px; height: 16px; accent-color: #1a1a1a;"
+                />
+                <label :for="'prod-' + product.id" class="section-title" style="margin: 0; cursor: pointer;">
+                  {{ product.title }}
+                </label>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 12px; color: #6b7280;">
+                  {{ getProductPermCount(product.id) }} render(s)
+                </span>
+                <button class="btn-icon" @click="previewProduct(product.id)" title="Preview product">
+                  &#128065;
+                </button>
+              </div>
+            </div>
+
+            <!-- Material Slots for this product -->
+            <div v-if="selectedProducts[product.id]">
+              <div
+                v-for="slot in (shim.allProductSlots[product.id] || [])"
+                :key="slot.id"
+                class="slot-section"
+              >
+                <div class="slot-title">
+                  <span>{{ slot.label }} ({{ selectedMaterialCount(product.id, slot.id) }}/{{ totalMaterialCount(product.id, slot.id) }})</span>
+                  <div class="section-actions">
+                    <button class="btn btn-sm" @click="toggleAllMaterials(product.id, slot.id, true)">All</button>
+                    <button class="btn btn-sm" @click="toggleAllMaterials(product.id, slot.id, false)">None</button>
+                  </div>
+                </div>
+
+                <div class="check-list">
+                  <div
+                    class="check-item"
+                    v-for="mat in slot.enabledMaterials"
+                    :key="mat.id"
+                  >
+                    <input
+                      type="checkbox"
+                      :id="'mat-' + product.id + '-' + slot.id + '-' + mat.id"
+                      v-model="selectedMaterials[product.id][slot.id][mat.id]"
+                    />
+                    <label :for="'mat-' + product.id + '-' + slot.id + '-' + mat.id">
+                      {{ mat.title }}
+                    </label>
+                    <button class="btn-icon" @click="previewMaterial(slot.id, mat.id)" title="Preview material">
+                      &#128065;
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Environment -->
+          <div class="section" v-if="shim.environments?.length">
+            <div class="section-title" style="margin-bottom: 12px;">Environment (fixed for all renders)</div>
+
+            <div class="input-group">
+              <label for="env-select">Environment</label>
+              <select id="env-select" v-model="selectedEnvironmentId" @change="previewEnvironment">
+                <option v-for="env in shim.environments" :key="env.id" :value="env.id">
+                  {{ env.title }}
+                </option>
+              </select>
+            </div>
+
+            <!-- Environment Material Slots -->
+            <div v-if="shim.environmentSlots?.length">
+              <div
+                v-for="slot in shim.environmentSlots"
+                :key="slot.id"
+                class="slot-section"
+              >
+                <div class="slot-title">
+                  <span>{{ slot.label }}</span>
+                </div>
+                <div class="check-list">
+                  <div
+                    class="check-item"
+                    v-for="mat in slot.enabledMaterials"
+                    :key="mat.id"
+                    @click="selectedEnvMaterials[slot.id] = mat.id; previewEnvMaterial(slot.id, mat.id)"
+                    style="cursor: pointer;"
+                  >
+                    <input
+                      type="radio"
+                      :name="'env-slot-' + slot.id"
+                      :value="mat.id"
+                      v-model="selectedEnvMaterials[slot.id]"
+                      style="width: 16px; height: 16px; accent-color: #1a1a1a; pointer-events: none;"
+                    />
+                    <label style="pointer-events: none;">{{ mat.title }}</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stats Bar -->
+          <div class="stats-bar">
+            <div class="stat">
+              <span class="stat-label">Permutations</span>
+              <span class="stat-value">{{ permutationCount }}</span>
+            </div>
+            <div class="stat" v-if="estimatedTotalSize">
+              <span class="stat-label">Est. Size</span>
+              <span class="stat-value">{{ estimatedTotalSize }}</span>
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn" @click="goToStep(1)">Back</button>
+            <button class="btn btn-primary" @click="nextStep" :disabled="!canProceedToStep3">
+              Next: Camera Angles ({{ permutationCount }} permutations)
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 3: Camera Angles (multi-angle) -->
+        <div class="step-content" :class="{ active: currentStep === 3 }">
+          <h2>Camera Angles</h2>
+          <p class="step-description">Add one or more camera angles. Each permutation will be rendered at every angle.</p>
+
+          <!-- Resolution (controls viewport shape) -->
+          <div class="section">
+            <div class="section-title" style="margin-bottom: 12px;">Resolution</div>
+            <div class="preset-grid">
+              <button
+                class="preset-btn"
+                v-for="preset in resolutionPresets"
+                :key="preset.value"
+                :class="{ active: resolutionPreset === preset.value }"
+                @click="resolutionPreset = preset.value"
+              >
+                {{ preset.label }}
+              </button>
+            </div>
+
+            <div v-if="resolutionPreset === 'custom'" class="input-row" style="margin-top: 8px;">
+              <div style="flex: 1;">
+                <label for="custom-w">Width</label>
+                <input type="number" id="custom-w" v-model.number="customWidth" min="256" max="8192" />
+              </div>
+              <div style="flex: 1;">
+                <label for="custom-h">Height</label>
+                <input type="number" id="custom-h" v-model.number="customHeight" min="256" max="8192" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Add angle input -->
+          <div class="section">
+            <div class="section-title" style="margin-bottom: 12px;">Add Angle</div>
+            <div class="input-group" style="margin-bottom: 8px;">
+              <label for="angle-name">Angle Name</label>
+              <div class="input-row">
+                <input
+                  type="text"
+                  id="angle-name"
+                  v-model="angleName"
+                  placeholder="e.g. front, side, top-down"
+                  @keyup.enter="addAngle"
+                />
+                <button class="btn btn-primary" @click="addAngle" :disabled="isCameraCapturing || !angleName.trim()">
+                  <span v-if="isCameraCapturing"><span class="spinner"></span></span>
+                  <span v-else>Add Angle</span>
+                </button>
+              </div>
+              <p class="info-msg">Position the camera in the viewport, then click "Add Angle" to save it.</p>
+            </div>
+          </div>
+
+          <!-- Angle list -->
+          <div class="section" v-if="cameraAngles.length > 0">
+            <div class="section-header">
+              <span class="section-title">Saved Angles ({{ cameraAngles.length }})</span>
+            </div>
+
+            <div class="check-list">
+              <div
+                class="check-item"
+                v-for="(angle, index) in cameraAngles"
+                :key="index"
+                style="justify-content: space-between;"
+              >
+                <span style="font-weight: 500;">{{ angle.name }}</span>
+                <div class="section-actions">
+                  <button class="btn-icon" @click="previewAngle(index)" title="Preview this angle">
+                    &#128065;
+                  </button>
+                  <button class="btn-icon" @click="recaptureAngle(index)" title="Recapture from current viewport" :disabled="isCameraCapturing">
+                    &#128247;
+                  </button>
+                  <button class="btn-icon" @click="removeAngle(index)" title="Remove angle" style="color: #dc2626;">
+                    &times;
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="cameraAngles.length === 0" class="info-msg">
+            No angles added yet. Position the camera and add at least one angle to continue.
+          </div>
+
+          <!-- Stats -->
+          <div class="stats-bar" v-if="cameraAngles.length > 0">
+            <div class="stat">
+              <span class="stat-label">Angles</span>
+              <span class="stat-value">{{ cameraAngles.length }}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Permutations</span>
+              <span class="stat-value">{{ permutationCount }}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Total Renders</span>
+              <span class="stat-value">{{ totalRenderCount }}</span>
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn" @click="goToStep(2)">Back</button>
+            <button class="btn btn-primary" @click="nextStep" :disabled="!canProceedToStep4">
+              Next: Render Settings ({{ totalRenderCount }} renders)
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 4: Render -->
+        <div class="step-content" :class="{ active: currentStep === 4 }">
+          <h2>Render</h2>
+          <p class="step-description">Review settings and start the batch render.</p>
+
+          <!-- Render Settings (hidden during render) -->
+          <div v-if="!isRendering && !renderComplete">
+            <div class="section">
+              <div class="section-title" style="margin-bottom: 12px;">Format</div>
+              <div class="format-row">
+                <button class="preset-btn" :class="{ active: format === 'image/png' }" @click="format = 'image/png'" style="flex: 1;">PNG</button>
+                <button class="preset-btn" :class="{ active: format === 'image/jpeg' }" @click="format = 'image/jpeg'" style="flex: 1;">JPEG</button>
+                <button class="preset-btn" :class="{ active: format === 'image/webp' }" @click="format = 'image/webp'" style="flex: 1;">WebP</button>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title" style="margin-bottom: 8px;">Estimate Size</div>
+              <p class="info-msg" style="margin-top: 0;">Takes a test screenshot to estimate total download size.</p>
+              <button class="btn btn-sm" @click="estimateSize" :disabled="isEstimating">
+                <span v-if="isEstimating"><span class="spinner"></span>Estimating</span>
+                <span v-else>Estimate</span>
+              </button>
+              <span v-if="estimatedFileSize" class="info-msg" style="margin-left: 8px;">
+                ~{{ formatSizeDisplay(estimatedFileSize) }}/render
+              </span>
+            </div>
+
+            <!-- Stats -->
+            <div class="stats-bar">
+              <div class="stat">
+                <span class="stat-label">Total Renders</span>
+                <span class="stat-value">{{ totalRenderCount }}</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Angles</span>
+                <span class="stat-value">{{ cameraAngles.length }}</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Resolution</span>
+                <span class="stat-value">{{ renderSize.x }} &times; {{ renderSize.y }}</span>
+              </div>
+              <div class="stat" v-if="estimatedTotalSize">
+                <span class="stat-label">Est. Total</span>
+                <span class="stat-value">{{ estimatedTotalSize }}</span>
+              </div>
+            </div>
+
+            <!-- Confirmation Dialog -->
+            <div v-if="showConfirmation" class="confirm-dialog" style="margin-top: 16px;">
+              <h3>Confirm Batch Render</h3>
+              <p><strong>{{ totalRenderCount }}</strong> renders ({{ permutationCount }} permutations &times; {{ cameraAngles.length }} angle{{ cameraAngles.length !== 1 ? 's' : '' }})</p>
+              <p>Resolution: <strong>{{ renderSize.x }}&times;{{ renderSize.y }}</strong> &middot; Format: <strong>{{ mimeToExtDisplay(format) }}</strong></p>
+              <p v-if="estimatedTotalSize">Estimated download: <strong>{{ estimatedTotalSize }}</strong></p>
+              <p>Angles: <strong>{{ cameraAngles.map(a => a.name).join(', ') }}</strong></p>
+              <div class="btn-row">
+                <button class="btn" @click="showConfirmation = false">Cancel</button>
+                <button class="btn btn-primary" @click="confirmRender">Start Rendering</button>
+              </div>
+            </div>
+
+            <div class="btn-row" v-if="!showConfirmation">
+              <button class="btn" @click="goToStep(3)">Back</button>
+              <button class="btn btn-primary" @click="startRender" :disabled="totalRenderCount === 0">
+                Start Batch Render ({{ totalRenderCount }})
+              </button>
+            </div>
+          </div>
+
+          <!-- Progress (during render) -->
+          <div v-if="isRendering" class="progress-section">
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" :style="{ width: renderProgress.percent + '%' }"></div>
+            </div>
+            <div class="progress-info">
+              <span>{{ renderProgress.current }} / {{ renderProgress.total }} ({{ renderProgress.percent }}%)</span>
+              <span>{{ elapsedTime }}</span>
+            </div>
+            <div class="progress-filename" v-if="renderProgress.filename">
+              {{ renderProgress.filename }}
+            </div>
+
+            <div class="btn-row">
+              <button class="btn btn-danger" @click="cancelRender">
+                Cancel &amp; Download Completed
+              </button>
+            </div>
+          </div>
+
+          <!-- Render Complete -->
+          <div v-if="renderComplete && !isRendering" style="margin-top: 16px;">
+            <div class="stats-bar">
+              <div class="stat">
+                <span class="stat-label">Completed</span>
+                <span class="stat-value" style="color: #059669;">{{ completedCount }}</span>
+              </div>
+              <div class="stat" v-if="failedCount > 0">
+                <span class="stat-label">Failed</span>
+                <span class="stat-value" style="color: #dc2626;">{{ failedCount }}</span>
+              </div>
+            </div>
+
+            <div class="btn-row">
+              <button class="btn" @click="resetRender">New Batch</button>
+              <button class="btn btn-primary" @click="goToStep(2)">Change Selection</button>
+            </div>
+          </div>
+
+          <!-- Render Log -->
+          <div v-if="renderLog.length > 0" class="render-log" ref="logContainer">
+            <div
+              v-for="(entry, i) in renderLog"
+              :key="i"
+              class="log-entry"
+              :class="entry.type"
+            >
+              <span style="color: #9ca3af;">{{ entry.time }}</span> {{ entry.msg }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </body>
+</html>
