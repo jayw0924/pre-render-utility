@@ -885,6 +885,9 @@
             cameraAngles: [],  // [{ name: 'front', payload: {...} }, ...]
             isCameraCapturing: false,
 
+            // Config save/load
+            configToLoad: null,
+
             // Step 4: Render
             resolutionPreset: '1024x1024',
             customWidth: 1920,
@@ -1062,8 +1065,14 @@
             if (newVal && this.isLoading) {
               this.isLoading = false;
               this.isLoaded = true;
-              this.initSelections();
-              this.currentStep = 2;
+
+              // If loading a config, apply it; otherwise init defaults
+              if (this.configToLoad) {
+                this.applyConfigToLoadedConfigurator();
+              } else {
+                this.initSelections();
+                this.currentStep = 2;
+              }
             }
           },
         },
@@ -1297,6 +1306,7 @@
 
             const zip = new JSZip();
             const usedNames = new Set();
+            const metadata = []; // Track render metadata for JSON export
             let renderIndex = 0;
             const ext = mimeToExt(this.format);
 
@@ -1400,6 +1410,27 @@
                     zip.file(filename, base64, { base64: true });
                     this.completedCount++;
                     this.addLog(`Rendered: ${filename}`, 'success');
+
+                    // Collect metadata for JSON export
+                    metadata.push({
+                      filename,
+                      productId: perm.productId,
+                      productName: perm.productName,
+                      materials: perm.materials.map(m => ({
+                        slotId: m.slotId,
+                        materialId: m.materialId,
+                        materialName: m.materialName,
+                      })),
+                      angle: {
+                        name: angle.name,
+                        camera: angle.payload,
+                      },
+                      format: this.format,
+                      resolution: {
+                        width: this.renderSize.x,
+                        height: this.renderSize.y,
+                      },
+                    });
                   } else {
                     this.failedCount++;
                     this.addLog(`No image data: ${filename}`, 'error');
@@ -1422,6 +1453,17 @@
             if (this.completedCount > 0) {
               this.addLog('Generating ZIP...');
               try {
+                // Add metadata JSON to ZIP
+                const metadataJson = {
+                  generated: new Date().toISOString(),
+                  configuratorId: extractUUID(this.configuratorInput.trim()),
+                  environmentId: this.selectedEnvironmentId,
+                  totalRenders: this.completedCount,
+                  renders: metadata,
+                };
+                zip.file('render-metadata.json', JSON.stringify(metadataJson, null, 2));
+                this.addLog('Added render-metadata.json');
+
                 const blob = await zip.generateAsync({ type: 'blob' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -1432,7 +1474,7 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                this.addLog(`ZIP downloaded: ${this.completedCount} renders (${formatSize(blob.size)})`, 'success');
+                this.addLog(`ZIP downloaded: ${this.completedCount} renders + metadata (${formatSize(blob.size)})`, 'success');
               } catch (err) {
                 this.addLog(`ZIP generation failed: ${err.message}`, 'error');
               }
@@ -1481,6 +1523,99 @@
             this.completedCount = 0;
             this.failedCount = 0;
             this.renderProgress = { current: 0, total: 0, percent: 0, filename: '', startTime: 0 };
+          },
+
+          // Config save/load
+          saveConfiguration() {
+            const config = {
+              version: 1,
+              saved: new Date().toISOString(),
+              configuratorInput: this.configuratorInput,
+              selectedProducts: JSON.parse(JSON.stringify(this.selectedProducts)),
+              selectedMaterials: JSON.parse(JSON.stringify(this.selectedMaterials)),
+              selectedEnvironmentId: this.selectedEnvironmentId,
+              selectedEnvMaterials: JSON.parse(JSON.stringify(this.selectedEnvMaterials)),
+              cameraAngles: JSON.parse(JSON.stringify(this.cameraAngles)),
+              resolutionPreset: this.resolutionPreset,
+              customWidth: this.customWidth,
+              customHeight: this.customHeight,
+              format: this.format,
+            };
+
+            const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            a.download = `render-config_${timestamp}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          },
+
+          handleConfigFileUpload(event) {
+            const file = event.target.files?.[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              try {
+                const config = JSON.parse(e.target.result);
+                this.applyConfiguration(config);
+              } catch (err) {
+                alert('Failed to load configuration: ' + err.message);
+              }
+            };
+            reader.readAsText(file);
+          },
+
+          applyConfiguration(config) {
+            if (!config.version || !config.configuratorInput) {
+              alert('Invalid configuration file.');
+              return;
+            }
+
+            // Store config to apply after configurator loads
+            this.configToLoad = config;
+
+            // Load the configurator if not already loaded or if different
+            const currentUuid = this.isLoaded ? extractUUID(this.configuratorInput) : null;
+            const configUuid = extractUUID(config.configuratorInput);
+
+            if (currentUuid !== configUuid) {
+              // Need to load the configurator first
+              this.configuratorInput = config.configuratorInput;
+              this.loadConfigurator();
+            } else {
+              // Same configurator, apply config immediately
+              this.applyConfigToLoadedConfigurator();
+            }
+          },
+
+          applyConfigToLoadedConfigurator() {
+            if (!this.configToLoad || !this.isLoaded) return;
+
+            const config = this.configToLoad;
+
+            // Restore selections
+            this.selectedProducts = config.selectedProducts || {};
+            this.selectedMaterials = config.selectedMaterials || {};
+            this.selectedEnvironmentId = config.selectedEnvironmentId || '';
+            this.selectedEnvMaterials = config.selectedEnvMaterials || {};
+
+            // Restore camera angles
+            this.cameraAngles = config.cameraAngles || [];
+
+            // Restore render settings
+            this.resolutionPreset = config.resolutionPreset || '1024x1024';
+            this.customWidth = config.customWidth || 1920;
+            this.customHeight = config.customHeight || 1080;
+            this.format = config.format || 'image/png';
+
+            this.configToLoad = null;
+            this.currentStep = 2; // Go to selection step
+            alert('Configuration loaded successfully!');
           },
 
           // Template helpers
@@ -1572,6 +1707,23 @@
             <p class="success-msg" v-if="isLoaded">
               Loaded — {{ shim.products?.length || 0 }} product(s), {{ shim.environments?.length || 0 }} environment(s)
             </p>
+          </div>
+
+          <div class="section" style="margin-top: 16px;">
+            <div class="section-title" style="margin-bottom: 8px;">Or Load Saved Configuration</div>
+            <p class="info-msg" style="margin-top: 0; margin-bottom: 8px;">
+              Load a previously saved configuration to reuse selections, camera angles, and settings.
+            </p>
+            <input
+              type="file"
+              accept=".json"
+              @change="handleConfigFileUpload"
+              style="display: none;"
+              ref="configFileInput"
+            />
+            <button class="btn btn-sm" @click="$refs.configFileInput.click()">
+              Load Configuration
+            </button>
           </div>
 
           <div class="btn-row" v-if="isLoaded">
@@ -1885,6 +2037,7 @@
 
             <div class="btn-row" v-if="!showConfirmation">
               <button class="btn" @click="goToStep(3)">Back</button>
+              <button class="btn" @click="saveConfiguration">Save Configuration</button>
               <button class="btn btn-primary" @click="startRender" :disabled="totalRenderCount === 0">
                 Start Batch Render ({{ totalRenderCount }})
               </button>
@@ -1926,6 +2079,7 @@
 
             <div class="btn-row">
               <button class="btn" @click="resetRender">New Batch</button>
+              <button class="btn" @click="saveConfiguration">Save Configuration</button>
               <button class="btn btn-primary" @click="goToStep(2)">Change Selection</button>
             </div>
           </div>
