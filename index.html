@@ -637,6 +637,107 @@
         to { transform: rotate(360deg); }
       }
 
+      /* Help button */
+      .help-button {
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #1a1a1a;
+        color: white;
+        border: none;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        z-index: 1000;
+        transition: all 0.2s ease;
+      }
+
+      .help-button:hover {
+        background: #333;
+        transform: scale(1.05);
+      }
+
+      /* Help overlay */
+      .help-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        padding: 20px;
+      }
+
+      .help-modal {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+      }
+
+      .help-modal h2 {
+        margin: 0 0 16px;
+        font-size: 20px;
+      }
+
+      .help-modal h3 {
+        margin: 16px 0 8px;
+        font-size: 15px;
+        color: #374151;
+      }
+
+      .help-modal p {
+        margin: 8px 0;
+        line-height: 1.5;
+        color: #6b7280;
+      }
+
+      .help-modal ul {
+        margin: 8px 0;
+        padding-left: 20px;
+        color: #6b7280;
+      }
+
+      .help-modal li {
+        margin: 4px 0;
+        line-height: 1.5;
+      }
+
+      .help-modal strong {
+        color: #1a1a1a;
+      }
+
+      .help-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: none;
+        border: none;
+        font-size: 24px;
+        color: #6b7280;
+        cursor: pointer;
+        padding: 4px 8px;
+        line-height: 1;
+      }
+
+      .help-close:hover {
+        color: #1a1a1a;
+      }
+
     </style>
 
     <!-- Vue 3 import map -->
@@ -961,6 +1062,9 @@
             // Persistent render settings
             renderSettingsExpanded: true,
             selectedGrid: 'none', // 'none', 'thirds', 'cross', 'quadrants', 'dot', 'safe'
+
+            // Help overlay
+            showHelp: false,
 
             // Step 4: Render
             resolutionPreset: '1024x1024',
@@ -1843,6 +1947,54 @@
     </noscript>
 
     <div class="container" id="app">
+      <!-- Help Button -->
+      <button class="help-button" @click="showHelp = true" title="Help & Instructions">?</button>
+
+      <!-- Help Overlay -->
+      <div class="help-overlay" v-if="showHelp" @click.self="showHelp = false">
+        <div class="help-modal" style="position: relative;">
+          <button class="help-close" @click="showHelp = false">&times;</button>
+
+          <h2>Metabox Batch Pre-Render</h2>
+          <p>Generate multiple product renders with different materials and camera angles in one batch.</p>
+
+          <h3>Quick Start</h3>
+          <p><strong>1. Load Configurator</strong> — Paste a Metabox URL or UUID</p>
+          <p><strong>2. Select Options</strong> — Choose products, materials, and environment</p>
+          <p><strong>3. Camera Angles</strong> — Position camera and save multiple angles</p>
+          <p><strong>4. Render</strong> — Start batch render and download ZIP</p>
+
+          <h3>Key Features</h3>
+          <ul>
+            <li><strong>Render Settings Panel</strong> — Set resolution, format, and grid overlay (always accessible at top)</li>
+            <li><strong>Grid Overlays</strong> — Use Rule of Thirds, Center Cross, or other guides for composition</li>
+            <li><strong>Copy Materials</strong> — Click "Copy to All" to apply material selections across all products</li>
+            <li><strong>Per-Product Camera Tweaks</strong> — Adjust camera angles for different-sized products</li>
+            <li><strong>Save Configuration</strong> — Save your setup to reuse with different environments or settings</li>
+            <li><strong>Metadata Export</strong> — Renders include JSON with camera settings for each image</li>
+          </ul>
+
+          <h3>Tips</h3>
+          <ul>
+            <li>Set resolution <strong>before</strong> framing camera angles — viewport shows exact aspect ratio</li>
+            <li>Use grid overlays to align products consistently across angles</li>
+            <li>For multiple similar products, configure one and "Copy to All"</li>
+            <li>Save configurations to iterate on environment or material variations</li>
+          </ul>
+
+          <h3>Output</h3>
+          <p>Downloads a ZIP file containing:</p>
+          <ul>
+            <li>All rendered images (named: product_materials_angle.png)</li>
+            <li><strong>render-metadata.json</strong> — Camera settings, product IDs, materials for each render</li>
+          </ul>
+
+          <div class="btn-row" style="margin-top: 20px;">
+            <button class="btn btn-primary" @click="showHelp = false">Got it!</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Left Panel: 3D Viewport -->
       <div class="left-panel" ref="viewport">
         <!-- Viewport container - applies aspect ratio and centers -->
