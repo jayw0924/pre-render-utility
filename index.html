@@ -269,6 +269,12 @@
         margin-top: 6px;
       }
 
+      .warning-msg {
+        color: #d97706;
+        font-size: 13px;
+        margin-top: 6px;
+      }
+
       .success-msg {
         color: #059669;
         font-size: 13px;
@@ -789,8 +795,13 @@
         // All product data keyed by productId for batch selection
         allProductSlots = {};
 
+        // Connection state tracking
+        apiConnected = false;
+        viewportReady = false;
+
         ready(api) {
           this.api = api;
+          this.apiConnected = true;
           this.addApiEventListeners();
           this.api.sendCommandToMetabox(new ShowEmbeddedMenu(false));
           this.api.sendCommandToMetabox(new ShowOverlayInterface(false));
@@ -802,9 +813,12 @@
           );
 
           this.api.addEventListener('viewportReady', (isReady) => {
-            if (isReady && this._viewportReadyResolver) {
-              this._viewportReadyResolver();
-              this._viewportReadyResolver = null;
+            if (isReady) {
+              this.viewportReady = true;
+              if (this._viewportReadyResolver) {
+                this._viewportReadyResolver();
+                this._viewportReadyResolver = null;
+              }
             }
           });
 
@@ -1034,6 +1048,7 @@
             // Step 1: Load
             configuratorInput: '',
             loadError: '',
+            loadWarning: '',
             isLoading: false,
             isLoaded: false,
 
@@ -1256,16 +1271,26 @@
 
         watch: {
           'shim.state'(newVal) {
-            if (newVal && this.isLoading) {
-              this.isLoading = false;
-              this.isLoaded = true;
+            if (newVal) {
+              // Data arrived - clear any warnings
+              this.loadWarning = '';
 
-              // If loading a config, apply it; otherwise init defaults
-              if (this.configToLoad) {
-                this.applyConfigToLoadedConfigurator();
-              } else {
-                this.initSelections();
-                this.currentStep = 2;
+              // If still loading, mark as loaded
+              if (this.isLoading) {
+                this.isLoading = false;
+                this.isLoaded = true;
+              }
+
+              // Initialize selections if not already done
+              // (Could happen if viewport was ready but data arrived late)
+              if (!this.selectedProducts || Object.keys(this.selectedProducts).length === 0) {
+                // If loading a config, apply it; otherwise init defaults
+                if (this.configToLoad) {
+                  this.applyConfigToLoadedConfigurator();
+                } else {
+                  this.initSelections();
+                  this.currentStep = 2;
+                }
               }
             }
           },
@@ -1281,6 +1306,7 @@
             }
 
             this.loadError = '';
+            this.loadWarning = '';
             this.isLoading = true;
             this.isLoaded = false;
 
@@ -1294,6 +1320,8 @@
             // Reset shim
             this.shim.state = null;
             this.shim.products = null;
+            this.shim.apiConnected = false;
+            this.shim.viewportReady = false;
 
             try {
               integrateMetabox(
@@ -1310,13 +1338,36 @@
               return;
             }
 
-            // Timeout after 30s
+            // Progressive timeout: check viewport readiness at 30s, hard fail at 90s
             setTimeout(() => {
               if (this.isLoading) {
-                this.isLoading = false;
-                this.loadError = 'Configurator load timed out (30s). Check the ID and try again.';
+                // If viewport is functional, allow proceeding even if data is slow
+                if (this.shim.apiConnected && this.shim.viewportReady) {
+                  this.isLoading = false;
+                  this.isLoaded = true;
+                  this.loadError = '';
+                  this.loadWarning = 'Viewport ready, but product data is still loading. Large configurators may take longer.';
+                  // Data will populate when configuratorDataUpdated eventually fires
+                } else {
+                  // Viewport not responding, but give it more time
+                  this.loadWarning = 'Still loading... (30s elapsed)';
+                }
               }
             }, 30000);
+
+            // Hard timeout at 90s - check if data still hasn't arrived
+            setTimeout(() => {
+              // If we're "loaded" but have no data, something failed
+              if (this.isLoaded && !this.shim.state) {
+                this.loadWarning = '';
+                this.loadError = 'Product data failed to load after 90s. The configurator may have too many products or the server timed out. Try a smaller configurator or contact support.';
+                this.isLoaded = false;
+              } else if (this.isLoading) {
+                // Still in loading state after 90s
+                this.isLoading = false;
+                this.loadError = 'Configurator load timed out (90s). The viewport may not be responding. Check the ID and try again.';
+              }
+            }, 90000);
           },
 
           // Initialize selections when configurator data first arrives
@@ -1675,11 +1726,17 @@
                 }
 
                 // Wait for the engine to finish rendering
-                try {
-                  await this.shim.waitForViewportReady(15000);
-                } catch {
-                  await sleep(3000);
+                // Only wait for viewport ready if it's not already ready (first render only)
+                if (!this.shim.viewportReady) {
+                  try {
+                    await this.shim.waitForViewportReady(15000);
+                  } catch {
+                    // Viewport didn't signal ready, but proceed anyway
+                    await sleep(1000);
+                  }
                 }
+
+                // Small buffer to ensure render completes
                 await sleep(500);
 
                 lastProductId = perm.productId;
@@ -2135,6 +2192,7 @@
               </button>
             </div>
             <p class="error-msg" v-if="loadError">{{ loadError }}</p>
+            <p class="warning-msg" v-if="loadWarning">{{ loadWarning }}</p>
             <p class="success-msg" v-if="isLoaded">
               Loaded — {{ shim.products?.length || 0 }} product(s), {{ shim.environments?.length || 0 }} environment(s)
             </p>
