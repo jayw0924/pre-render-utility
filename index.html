@@ -1411,6 +1411,47 @@
             this.productTweaksExpanded[productId] = !this.productTweaksExpanded[productId];
           },
 
+          // Copy materials from one product to all others
+          copyMaterialsToAll(sourceProductId) {
+            const sourceSelections = this.selectedMaterials[sourceProductId];
+            if (!sourceSelections) {
+              alert('No material selections to copy.');
+              return;
+            }
+
+            let copiedCount = 0;
+            const products = this.shim.products || [];
+
+            for (const product of products) {
+              // Skip the source product itself
+              if (product.id === sourceProductId) continue;
+
+              // Get slots for this target product
+              const targetSlots = this.shim.allProductSlots[product.id] || [];
+
+              // Initialize structure if needed
+              if (!this.selectedMaterials[product.id]) {
+                this.selectedMaterials[product.id] = {};
+              }
+
+              // Copy matching slots
+              for (const slot of targetSlots) {
+                const sourceSlotSelections = sourceSelections[slot.id];
+                if (sourceSlotSelections) {
+                  // Copy the entire slot's material selections
+                  this.selectedMaterials[product.id][slot.id] = JSON.parse(JSON.stringify(sourceSlotSelections));
+                  copiedCount++;
+                }
+              }
+            }
+
+            if (copiedCount > 0) {
+              alert(`Copied material selections to ${products.length - 1} other product(s).`);
+            } else {
+              alert('No matching slots found to copy.');
+            }
+          },
+
           // Step 4: Estimate size
           async estimateSize() {
             this.isEstimating = true;
@@ -1992,6 +2033,14 @@
                 <span style="font-size: 12px; color: #6b7280;">
                   {{ getProductPermCount(product.id) }} render(s)
                 </span>
+                <button
+                  class="btn btn-sm"
+                  @click="copyMaterialsToAll(product.id)"
+                  title="Copy this product's material selections to all other products"
+                  v-if="(shim.products || []).length > 1"
+                >
+                  Copy to All
+                </button>
                 <button class="btn-icon" @click="previewProduct(product.id)" title="Preview product">
                   &#128065;
                 </button>
