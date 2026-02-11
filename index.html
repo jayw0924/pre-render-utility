@@ -54,11 +54,16 @@
         border-left: 1px solid #e1e4e8;
       }
 
+      /* Viewport container - wraps embed + grid */
+      .viewport-container {
+        position: relative;
+        transition: width 0.3s ease, height 0.3s ease;
+      }
+
       #embed3DSource {
         width: 100%;
         height: 100%;
         background-color: #1a1a2e;
-        transition: width 0.3s ease, height 0.3s ease;
       }
 
       /* Viewport overlay for camera step */
@@ -551,6 +556,70 @@
         background: #9ca3af;
       }
 
+      /* Grid overlays */
+      .grid-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 10;
+      }
+
+      /* Rule of thirds - 3x3 grid */
+      .grid-thirds {
+        background-image:
+          linear-gradient(to right, transparent 33.33%, rgba(255,255,255,0.6) 33.33%, rgba(255,255,255,0.6) 33.43%, transparent 33.43%,
+                          transparent 66.66%, rgba(255,255,255,0.6) 66.66%, rgba(255,255,255,0.6) 66.76%, transparent 66.76%),
+          linear-gradient(to bottom, transparent 33.33%, rgba(255,255,255,0.6) 33.33%, rgba(255,255,255,0.6) 33.43%, transparent 33.43%,
+                          transparent 66.66%, rgba(255,255,255,0.6) 66.66%, rgba(255,255,255,0.6) 66.76%, transparent 66.76%);
+      }
+
+      /* Center cross */
+      .grid-cross {
+        background-image:
+          linear-gradient(to right, transparent calc(50% - 1px), rgba(255,255,255,0.7) calc(50% - 1px), rgba(255,255,255,0.7) calc(50% + 1px), transparent calc(50% + 1px)),
+          linear-gradient(to bottom, transparent calc(50% - 1px), rgba(255,255,255,0.7) calc(50% - 1px), rgba(255,255,255,0.7) calc(50% + 1px), transparent calc(50% + 1px));
+      }
+
+      /* Quadrants - 2x2 grid */
+      .grid-quadrants {
+        background-image:
+          linear-gradient(to right, transparent calc(50% - 1px), rgba(255,255,255,0.6) calc(50% - 1px), rgba(255,255,255,0.6) calc(50% + 1px), transparent calc(50% + 1px)),
+          linear-gradient(to bottom, transparent calc(50% - 1px), rgba(255,255,255,0.6) calc(50% - 1px), rgba(255,255,255,0.6) calc(50% + 1px), transparent calc(50% + 1px));
+      }
+
+      /* Center dot */
+      .grid-dot::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 10px;
+        height: 10px;
+        background: rgba(255,255,255,0.85);
+        border: 2px solid rgba(0,0,0,0.6);
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+      }
+
+      /* Safe area - 90% inner frame */
+      .grid-safe {
+        box-shadow: inset 0 0 0 calc(5%) rgba(255,255,255,0.15);
+      }
+
+      .grid-safe::before {
+        content: '';
+        position: absolute;
+        top: 5%;
+        left: 5%;
+        right: 5%;
+        bottom: 5%;
+        border: 2px solid rgba(255,255,255,0.6);
+        pointer-events: none;
+      }
+
       /* Loading spinner */
       .spinner {
         display: inline-block;
@@ -882,11 +951,16 @@
 
             // Step 3: Camera angles (multi-angle)
             angleName: 'front',
-            cameraAngles: [],  // [{ name: 'front', payload: {...} }, ...]
+            cameraAngles: [],  // [{ name: 'front', payload: {...}, productOverrides: { 'productId': {...} } }, ...]
             isCameraCapturing: false,
+            productTweaksExpanded: {}, // Track which product tweak sections are expanded
 
             // Config save/load
             configToLoad: null,
+
+            // Persistent render settings
+            renderSettingsExpanded: true,
+            selectedGrid: 'none', // 'none', 'thirds', 'cross', 'quadrants', 'dot', 'safe'
 
             // Step 4: Render
             resolutionPreset: '1024x1024',
@@ -919,6 +993,22 @@
             ];
           },
 
+          gridOptions() {
+            return [
+              { label: 'None', value: 'none' },
+              { label: 'Rule of Thirds', value: 'thirds' },
+              { label: 'Center Cross', value: 'cross' },
+              { label: 'Quadrants', value: 'quadrants' },
+              { label: 'Center Dot', value: 'dot' },
+              { label: 'Safe Area', value: 'safe' },
+            ];
+          },
+
+          gridOverlayClass() {
+            if (this.selectedGrid === 'none') return '';
+            return `grid-${this.selectedGrid}`;
+          },
+
           renderSize() {
             if (this.resolutionPreset === 'custom') {
               return { x: parseInt(this.customWidth) || 1024, y: parseInt(this.customHeight) || 1024 };
@@ -928,8 +1018,8 @@
           },
 
           embedStyle() {
-            // On steps 1-2, fill the panel. On steps 3+, constrain to render aspect ratio.
-            if (this.currentStep < 3 || !this.viewportWidth || !this.viewportHeight) {
+            // Always constrain to render aspect ratio (after configurator loads)
+            if (!this.isLoaded || !this.viewportWidth || !this.viewportHeight) {
               return { width: '100%', height: '100%' };
             }
 
@@ -1232,7 +1322,11 @@
             this.isCameraCapturing = true;
             try {
               const payload = await this.shim.captureCamera();
-              this.cameraAngles.push({ name, payload: JSON.parse(JSON.stringify(payload)) });
+              this.cameraAngles.push({
+                name,
+                payload: JSON.parse(JSON.stringify(payload)),
+                productOverrides: {} // Initialize empty overrides
+              });
               this.angleName = '';
             } catch (err) {
               alert('Failed to capture camera angle: ' + err.message);
@@ -1260,6 +1354,61 @@
 
           removeAngle(index) {
             this.cameraAngles.splice(index, 1);
+          },
+
+          // Per-product angle tweaking
+          async tweakAngleForProduct(angleIndex, productId) {
+            // First, set the product in the viewport
+            this.shim.sendProduct(productId);
+            await sleep(1000); // Wait for product to load
+
+            // Then capture the camera for this specific product
+            this.isCameraCapturing = true;
+            try {
+              const payload = await this.shim.captureCamera();
+              const angle = this.cameraAngles[angleIndex];
+              if (!angle.productOverrides) {
+                angle.productOverrides = {};
+              }
+              angle.productOverrides[productId] = JSON.parse(JSON.stringify(payload));
+            } catch (err) {
+              alert('Failed to capture product-specific angle: ' + err.message);
+            }
+            this.isCameraCapturing = false;
+          },
+
+          async previewAngleForProduct(angleIndex, productId) {
+            const angle = this.cameraAngles[angleIndex];
+
+            // Set product first
+            this.shim.sendProduct(productId);
+            await sleep(500);
+
+            // Use product-specific angle if exists, otherwise use global
+            const cameraPayload = angle.productOverrides?.[productId] || angle.payload;
+            if (cameraPayload) {
+              this.shim.setCamera(cameraPayload);
+            }
+          },
+
+          removeProductOverride(angleIndex, productId) {
+            const angle = this.cameraAngles[angleIndex];
+            if (angle.productOverrides) {
+              delete angle.productOverrides[productId];
+            }
+          },
+
+          hasProductOverride(angleIndex, productId) {
+            const angle = this.cameraAngles[angleIndex];
+            return angle.productOverrides && angle.productOverrides[productId];
+          },
+
+          getSelectedProductsList() {
+            return (this.shim.products || []).filter(p => this.selectedProducts[p.id]);
+          },
+
+          toggleProductTweaks(productId) {
+            this.productTweaksExpanded[productId] = !this.productTweaksExpanded[productId];
           },
 
           // Step 4: Estimate size
@@ -1338,11 +1487,8 @@
               const angle = angles[a];
               this.addLog(`Setting camera angle: ${angle.name}`);
 
-              // Set camera once for this angle
-              this.shim.setCamera(angle.payload);
-              await this.shim.waitForCameraStable();
-
               let lastProductId = null;
+              let lastAnglePayload = null;
 
               // Cycle through all permutations at this angle
               for (let i = 0; i < perms.length; i++) {
@@ -1358,6 +1504,18 @@
                 if (productChanged) {
                   this.shim.sendProduct(perm.productId);
                   this.addLog(`Switching to product: ${perm.productName}`);
+
+                  // When product changes, apply the appropriate camera angle
+                  // (product-specific override if exists, otherwise global)
+                  const cameraPayload = angle.productOverrides?.[perm.productId] || angle.payload;
+
+                  // Only set camera if it's different from last applied angle
+                  const cameraPayloadStr = JSON.stringify(cameraPayload);
+                  if (cameraPayloadStr !== lastAnglePayload) {
+                    this.shim.setCamera(cameraPayload);
+                    await this.shim.waitForCameraStable();
+                    lastAnglePayload = cameraPayloadStr;
+                  }
                 }
 
                 // Set materials — triggers re-render with current camera
@@ -1412,6 +1570,8 @@
                     this.addLog(`Rendered: ${filename}`, 'success');
 
                     // Collect metadata for JSON export
+                    // Use product-specific camera if it exists, otherwise use global
+                    const usedCamera = angle.productOverrides?.[perm.productId] || angle.payload;
                     metadata.push({
                       filename,
                       productId: perm.productId,
@@ -1423,7 +1583,8 @@
                       })),
                       angle: {
                         name: angle.name,
-                        camera: angle.payload,
+                        camera: usedCamera,
+                        isProductSpecific: !!angle.productOverrides?.[perm.productId],
                       },
                       format: this.format,
                       resolution: {
@@ -1540,6 +1701,7 @@
               customWidth: this.customWidth,
               customHeight: this.customHeight,
               format: this.format,
+              selectedGrid: this.selectedGrid,
             };
 
             const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
@@ -1612,6 +1774,7 @@
             this.customWidth = config.customWidth || 1920;
             this.customHeight = config.customHeight || 1080;
             this.format = config.format || 'image/png';
+            this.selectedGrid = config.selectedGrid || 'none';
 
             this.configToLoad = null;
             this.currentStep = 2; // Go to selection step
@@ -1641,7 +1804,13 @@
     <div class="container" id="app">
       <!-- Left Panel: 3D Viewport -->
       <div class="left-panel" ref="viewport">
-        <div id="embed3DSource" :style="embedStyle"></div>
+        <!-- Viewport container - applies aspect ratio and centers -->
+        <div class="viewport-container" :style="embedStyle">
+          <div id="embed3DSource"></div>
+
+          <!-- Grid overlay (matches viewport dimensions exactly) -->
+          <div v-if="isLoaded && selectedGrid !== 'none'" class="grid-overlay" :class="gridOverlayClass"></div>
+        </div>
 
         <!-- Camera step overlay hint -->
         <div class="viewport-overlay" v-if="currentStep === 3">
@@ -1655,6 +1824,75 @@
 
       <!-- Right Panel: Workflow Steps -->
       <div class="right-panel">
+        <!-- Persistent Render Settings -->
+        <div class="section" style="margin-bottom: 16px;" v-if="isLoaded">
+          <div
+            class="section-header"
+            style="cursor: pointer; user-select: none;"
+            @click="renderSettingsExpanded = !renderSettingsExpanded"
+          >
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 16px;">{{ renderSettingsExpanded ? '▼' : '▶' }}</span>
+              <span class="section-title">Render Settings</span>
+            </div>
+            <div v-if="!renderSettingsExpanded" style="font-size: 12px; color: #6b7280;">
+              {{ renderSize.x }}×{{ renderSize.y }} · {{ mimeToExtDisplay(format) }}
+              <span v-if="selectedGrid !== 'none'"> · Grid: {{ gridOptions.find(g => g.value === selectedGrid)?.label }}</span>
+            </div>
+          </div>
+
+          <div v-if="renderSettingsExpanded" style="margin-top: 12px;">
+            <!-- Resolution -->
+            <div class="input-group">
+              <label>Resolution</label>
+              <div class="preset-grid">
+                <button
+                  class="preset-btn"
+                  v-for="preset in resolutionPresets"
+                  :key="preset.value"
+                  :class="{ active: resolutionPreset === preset.value }"
+                  @click="resolutionPreset = preset.value"
+                >
+                  {{ preset.label }}
+                </button>
+              </div>
+
+              <div v-if="resolutionPreset === 'custom'" class="input-row" style="margin-top: 8px;">
+                <div style="flex: 1;">
+                  <label for="custom-w-global">Width</label>
+                  <input type="number" id="custom-w-global" v-model.number="customWidth" min="256" max="8192" />
+                </div>
+                <div style="flex: 1;">
+                  <label for="custom-h-global">Height</label>
+                  <input type="number" id="custom-h-global" v-model.number="customHeight" min="256" max="8192" />
+                </div>
+              </div>
+              <p class="info-msg">Viewport will preview this aspect ratio</p>
+            </div>
+
+            <!-- Format -->
+            <div class="input-group">
+              <label>Format</label>
+              <div class="format-row">
+                <button class="preset-btn" :class="{ active: format === 'image/png' }" @click="format = 'image/png'" style="flex: 1;">PNG</button>
+                <button class="preset-btn" :class="{ active: format === 'image/jpeg' }" @click="format = 'image/jpeg'" style="flex: 1;">JPEG</button>
+                <button class="preset-btn" :class="{ active: format === 'image/webp' }" @click="format = 'image/webp'" style="flex: 1;">WebP</button>
+              </div>
+            </div>
+
+            <!-- Grid Overlay -->
+            <div class="input-group" style="margin-bottom: 0;">
+              <label for="grid-select">Alignment Grid</label>
+              <select id="grid-select" v-model="selectedGrid">
+                <option v-for="grid in gridOptions" :key="grid.value" :value="grid.value">
+                  {{ grid.label }}
+                </option>
+              </select>
+              <p class="info-msg">Overlay to help with composition and alignment</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Step Tabs -->
         <div class="steps">
           <button class="step-tab"
@@ -1866,34 +2104,7 @@
         <!-- Step 3: Camera Angles (multi-angle) -->
         <div class="step-content" :class="{ active: currentStep === 3 }">
           <h2>Camera Angles</h2>
-          <p class="step-description">Add one or more camera angles. Each permutation will be rendered at every angle.</p>
-
-          <!-- Resolution (controls viewport shape) -->
-          <div class="section">
-            <div class="section-title" style="margin-bottom: 12px;">Resolution</div>
-            <div class="preset-grid">
-              <button
-                class="preset-btn"
-                v-for="preset in resolutionPresets"
-                :key="preset.value"
-                :class="{ active: resolutionPreset === preset.value }"
-                @click="resolutionPreset = preset.value"
-              >
-                {{ preset.label }}
-              </button>
-            </div>
-
-            <div v-if="resolutionPreset === 'custom'" class="input-row" style="margin-top: 8px;">
-              <div style="flex: 1;">
-                <label for="custom-w">Width</label>
-                <input type="number" id="custom-w" v-model.number="customWidth" min="256" max="8192" />
-              </div>
-              <div style="flex: 1;">
-                <label for="custom-h">Height</label>
-                <input type="number" id="custom-h" v-model.number="customHeight" min="256" max="8192" />
-              </div>
-            </div>
-          </div>
+          <p class="step-description">Add one or more camera angles. Each permutation will be rendered at every angle. The viewport shows the render aspect ratio set above.</p>
 
           <!-- Add angle input -->
           <div class="section">
@@ -1950,6 +2161,72 @@
             No angles added yet. Position the camera and add at least one angle to continue.
           </div>
 
+          <!-- Per-Product Camera Tweaks -->
+          <div class="section" v-if="cameraAngles.length > 0 && getSelectedProductsList().length > 1">
+            <div class="section-header">
+              <span class="section-title">Product-Specific Adjustments (Optional)</span>
+            </div>
+            <p class="info-msg" style="margin-top: 0; margin-bottom: 12px;">
+              Different products may need different camera positions. Tweak angles for specific products below. If not tweaked, the global angle will be used.
+            </p>
+
+            <div v-for="product in getSelectedProductsList()" :key="product.id" style="margin-bottom: 12px;">
+              <div
+                style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f9fafb; border-radius: 8px; cursor: pointer;"
+                @click="toggleProductTweaks(product.id)"
+              >
+                <span style="font-weight: 600; font-size: 13px;">{{ product.title }}</span>
+                <span style="font-size: 16px;">{{ productTweaksExpanded[product.id] ? '▼' : '▶' }}</span>
+              </div>
+
+              <div v-if="productTweaksExpanded[product.id]" style="margin-top: 8px; padding-left: 12px; border-left: 2px solid #e5e7eb;">
+                <div
+                  v-for="(angle, angleIndex) in cameraAngles"
+                  :key="angleIndex"
+                  class="check-item"
+                  style="justify-content: space-between; margin-bottom: 4px;"
+                >
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-weight: 500; font-size: 13px;">{{ angle.name }}</span>
+                    <span
+                      v-if="hasProductOverride(angleIndex, product.id)"
+                      style="font-size: 11px; background: #ecfdf5; color: #065f46; padding: 2px 6px; border-radius: 4px;"
+                    >
+                      Custom
+                    </span>
+                  </div>
+                  <div class="section-actions">
+                    <button
+                      class="btn-icon"
+                      @click="previewAngleForProduct(angleIndex, product.id)"
+                      title="Preview this angle for this product"
+                      :disabled="isCameraCapturing"
+                    >
+                      &#128065;
+                    </button>
+                    <button
+                      class="btn-icon"
+                      @click="tweakAngleForProduct(angleIndex, product.id)"
+                      :title="hasProductOverride(angleIndex, product.id) ? 'Recapture custom angle' : 'Set custom angle for this product'"
+                      :disabled="isCameraCapturing"
+                    >
+                      {{ hasProductOverride(angleIndex, product.id) ? '&#128247;' : '+' }}
+                    </button>
+                    <button
+                      v-if="hasProductOverride(angleIndex, product.id)"
+                      class="btn-icon"
+                      @click="removeProductOverride(angleIndex, product.id)"
+                      title="Remove custom angle (use global)"
+                      style="color: #dc2626;"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Stats -->
           <div class="stats-bar" v-if="cameraAngles.length > 0">
             <div class="stat">
@@ -1981,15 +2258,6 @@
 
           <!-- Render Settings (hidden during render) -->
           <div v-if="!isRendering && !renderComplete">
-            <div class="section">
-              <div class="section-title" style="margin-bottom: 12px;">Format</div>
-              <div class="format-row">
-                <button class="preset-btn" :class="{ active: format === 'image/png' }" @click="format = 'image/png'" style="flex: 1;">PNG</button>
-                <button class="preset-btn" :class="{ active: format === 'image/jpeg' }" @click="format = 'image/jpeg'" style="flex: 1;">JPEG</button>
-                <button class="preset-btn" :class="{ active: format === 'image/webp' }" @click="format = 'image/webp'" style="flex: 1;">WebP</button>
-              </div>
-            </div>
-
             <div class="section">
               <div class="section-title" style="margin-bottom: 8px;">Estimate Size</div>
               <p class="info-msg" style="margin-top: 0;">Takes a test screenshot to estimate total download size.</p>
