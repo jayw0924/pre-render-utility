@@ -791,6 +791,7 @@
         _viewportReadyResolver = null;
         _screenshotResolver = null;
         _cameraResolver = null;
+        _dataUpdateResolver = null;
 
         // All product data keyed by productId for batch selection
         allProductSlots = {};
@@ -808,12 +809,17 @@
         }
 
         addApiEventListeners() {
-          this.api.addEventListener('configuratorDataUpdated', (data) =>
-            this.updateConfiguratorData(data),
-          );
+          this.api.addEventListener('configuratorDataUpdated', (data) => {
+            this.updateConfiguratorData(data);
+            if (this._dataUpdateResolver) {
+              this._dataUpdateResolver();
+            }
+          });
 
           this.api.addEventListener('viewportReady', (isReady) => {
-            this.viewportReady = !!isReady;
+            if (isReady) {
+              this.viewportReady = true;
+            }
             if (isReady && this._viewportReadyResolver) {
               this._viewportReadyResolver();
               this._viewportReadyResolver = null;
@@ -907,6 +913,30 @@
           // NOTE: SetCamera has a known one-behind bug in the Metabox API.
           // Once the API fix is released, this should work correctly as-is.
           this.api.sendCommandToMetabox(new SetCamera(JSON.parse(JSON.stringify(payload))));
+        }
+
+        // Promise-based: wait for configuratorDataUpdated with optional verification.
+        // If verify is provided, stale events that don't pass verification are
+        // ignored — preventing previous permutations' leftover events from
+        // resolving the wait too early.
+        waitForDataUpdate(verify, timeout = 10000) {
+          if (verify && verify()) return Promise.resolve();
+
+          return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+              this._dataUpdateResolver = null;
+              reject(new Error('Data update timeout'));
+            }, timeout);
+
+            this._dataUpdateResolver = () => {
+              if (!verify || verify()) {
+                clearTimeout(timer);
+                this._dataUpdateResolver = null;
+                resolve();
+              }
+              // verify returned false — stale event, keep waiting
+            };
+          });
         }
 
         // Promise-based: wait for viewportReady true
@@ -1715,11 +1745,6 @@
                   }
                 }
 
-                // Reset viewport ready flag BEFORE sending commands that
-                // trigger a re-render — this ensures we properly wait for
-                // the engine to finish applying the new material/product.
-                this.shim.viewportReady = false;
-
                 // Set materials — triggers re-render with current camera
                 for (const mat of perm.materials) {
                   this.shim.sendProductMaterial(mat.slotId, mat.materialId);
@@ -1731,17 +1756,36 @@
                   this.shim.sendProduct(perm.productId);
                 }
 
-                // Wait for the engine to finish rendering the material change.
-                // Always wait — skipping this causes material/filename mismatches
-                // because the screenshot captures the previous frame.
-                try {
-                  await this.shim.waitForViewportReady(15000);
-                } catch {
-                  // Viewport didn't signal ready in time — generous fallback
-                  await sleep(2000);
+                // Wait for the engine to apply ALL materials for this permutation.
+                // Verifies productMaterialsIds matches what we sent — this prevents
+                // stale events from previous permutations resolving the wait early
+                // (each SetProductMaterial fires its own configuratorDataUpdated).
+                if (perm.materials.length > 0) {
+                  const expected = perm.materials;
+                  try {
+                    await this.shim.waitForDataUpdate(
+                      () => expected.every(mat =>
+                        this.shim.productMaterialsIds?.[mat.slotId] === mat.materialId
+                      ),
+                      10000,
+                    );
+                  } catch {
+                    // Verification didn't pass in time — generous fallback
+                    await sleep(2000);
+                  }
                 }
 
-                // Small buffer to ensure render completes
+                // On first render, also wait for viewport to be ready (iframe load)
+                if (!this.shim.viewportReady) {
+                  try {
+                    await this.shim.waitForViewportReady(15000);
+                  } catch {
+                    await sleep(1000);
+                  }
+                }
+
+                // Small buffer to ensure the re-rendered frame is
+                // ready for screenshot capture
                 await sleep(500);
 
                 lastProductId = perm.productId;
