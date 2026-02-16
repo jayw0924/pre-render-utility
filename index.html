@@ -576,10 +576,10 @@
       /* Rule of thirds - 3x3 grid */
       .grid-thirds {
         background-image:
-          linear-gradient(to right, transparent 33.33%, rgba(255,255,255,0.6) 33.33%, rgba(255,255,255,0.6) 33.43%, transparent 33.43%,
-                          transparent 66.66%, rgba(255,255,255,0.6) 66.66%, rgba(255,255,255,0.6) 66.76%, transparent 66.76%),
-          linear-gradient(to bottom, transparent 33.33%, rgba(255,255,255,0.6) 33.33%, rgba(255,255,255,0.6) 33.43%, transparent 33.43%,
-                          transparent 66.66%, rgba(255,255,255,0.6) 66.66%, rgba(255,255,255,0.6) 66.76%, transparent 66.76%);
+          linear-gradient(to right, transparent calc(33.33% - 1px), rgba(255,255,255,0.6) calc(33.33% - 1px), rgba(255,255,255,0.6) calc(33.33% + 1px), transparent calc(33.33% + 1px),
+                          transparent calc(66.67% - 1px), rgba(255,255,255,0.6) calc(66.67% - 1px), rgba(255,255,255,0.6) calc(66.67% + 1px), transparent calc(66.67% + 1px)),
+          linear-gradient(to bottom, transparent calc(33.33% - 1px), rgba(255,255,255,0.6) calc(33.33% - 1px), rgba(255,255,255,0.6) calc(33.33% + 1px), transparent calc(33.33% + 1px),
+                          transparent calc(66.67% - 1px), rgba(255,255,255,0.6) calc(66.67% - 1px), rgba(255,255,255,0.6) calc(66.67% + 1px), transparent calc(66.67% + 1px));
       }
 
       /* Center cross */
